@@ -1,8 +1,8 @@
 import pytest
 from langsmith import unit
 
-from react_agent import graph
-from react_agent.context import Context
+from deep_podcast import graph
+from deep_podcast.context import Context
 
 
 @pytest.mark.asyncio

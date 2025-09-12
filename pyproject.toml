@@ -65,3 +65,7 @@ dev = [
     "langgraph-cli[inmem]>=0.1.71",
     "pytest>=8.3.5",
 ]
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true

@@ -1,7 +1,9 @@
 {
   "dependencies": ["."],
   "graphs": {
-    "agent": "./src/react_agent/graph.py:graph"
+    "deep_podcast": "./src/deep_podcast/graph.py:graph",
+    "deep_research": "./src/deep_research/graph.py:graph",
+    "podcast": "./src/podcast/graph.py:graph"
   },
   "env": ".env"
 }
