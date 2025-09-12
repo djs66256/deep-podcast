@@ -72,10 +72,12 @@ async def analyze_research_report(report_content: str) -> Dict[str, Any]:
         
         # Try to parse as JSON first, fallback to text parsing
         try:
-            key_points_data = json.loads(response.content)
+            content = str(response.content)
+            key_points_data = json.loads(content)
         except json.JSONDecodeError:
             # Parse manually from text response
-            lines = response.content.split('\n')
+            content = str(response.content)
+            lines = content.split('\n')
             key_points_data = {"key_points": []}
             
             current_point = {}
@@ -174,10 +176,11 @@ async def design_podcast_characters(topic: str, key_points: List[Dict[str, Any]]
         
         # Parse character data from response
         try:
-            characters_data = json.loads(response.content)
+            content = str(response.content)
+            characters_data = json.loads(content)
         except json.JSONDecodeError:
             # Fallback to default characters
-            characters_data = _get_default_characters(topic)
+            characters_data = _get_default_characters_data(topic)
         
         characters = []
         voice_models = runtime.context.voice_models
@@ -207,6 +210,7 @@ async def design_podcast_characters(topic: str, key_points: List[Dict[str, Any]]
     except Exception as e:
         logger.error(f"Character design failed: {e}")
         # Return default characters as fallback
+        runtime = get_runtime(Context)
         return _get_default_characters(topic, runtime.context.voice_models)
 
 
@@ -230,6 +234,28 @@ def _analyze_topic_characteristics(topic: str, key_points: List[Dict[str, Any]])
         characteristics.append("内容适中")
     
     return ", ".join(characteristics) if characteristics else "通用话题"
+
+
+def _get_default_characters_data(topic: str) -> Dict[str, Any]:
+    """Get default character data structure."""
+    return {
+        "characters": [
+            {
+                "name": "主持人小云",
+                "role": "主持人",
+                "personality": "专业、引导性强、善于提问和总结",
+                "background": "资深媒体人，擅长深度访谈",
+                "expertise": ["访谈技巧", "内容梳理", "观众互动"]
+            },
+            {
+                "name": "专家小刚",
+                "role": "专业嘉宾",
+                "personality": "知识渊博、表达清晰、有独特见解",
+                "background": f"{topic}领域专家，具有丰富的实践经验",
+                "expertise": [topic, "行业分析", "趋势预测"]
+            }
+        ]
+    }
 
 
 def _get_default_characters(topic: str, voice_models: Optional[Dict[str, str]] = None) -> List[Character]:
@@ -302,7 +328,7 @@ async def generate_podcast_script(
             await model.ainvoke([HumanMessage(content=prompt)])
         )
         
-        script_content = response.content
+        script_content = str(response.content)
         
         # Validate and enhance script if needed
         if len(script_content) < 1000:
@@ -409,13 +435,16 @@ async def segment_script_for_tts(script_content: str) -> List[DialogSegment]:
         
         # Parse segmentation response
         try:
-            segments_data = json.loads(response.content)
+            content = str(response.content)
+            segments_data = json.loads(content)
         except json.JSONDecodeError:
             # Fallback to manual parsing
             segments_data = _parse_script_manually(script_content)
+            return segments_data
         
         segments = []
-        for segment_data in segments_data:
+        segments_list = segments_data if isinstance(segments_data, list) else segments_data.get("segments", [])
+        for segment_data in segments_list:
             segment = DialogSegment(
                 segment_id=segment_data.get("segment_id", 0),
                 speaker=segment_data.get("speaker", "Unknown"),
@@ -484,6 +513,10 @@ async def synthesize_speech_qwen(
         Path to generated audio file or None if failed
     """
     try:
+        if not text or not text.strip():
+            logger.warning("Empty text provided for TTS synthesis")
+            return None
+            
         runtime = get_runtime(Context)
         
         if not runtime.context.qwen_tts_api_key:

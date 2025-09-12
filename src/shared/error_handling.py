@@ -11,6 +11,8 @@ from typing import Any, Callable, Dict, List, Optional, Type, Union
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+import logging
+
 from loguru import logger
 from tenacity import (
     retry,
@@ -177,6 +179,28 @@ class CircuitBreaker:
         self.failure_count = 0
         self.last_failure_time: Optional[datetime] = None
         self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
+    
+    def call_sync(self, func: Callable, *args, **kwargs) -> Any:
+        """Execute synchronous function with circuit breaker protection."""
+        
+        if self.state == "OPEN":
+            if self._should_attempt_reset():
+                self.state = "HALF_OPEN"
+            else:
+                raise DeepPodcastException(
+                    "Circuit breaker is OPEN - service unavailable",
+                    severity=ErrorSeverity.HIGH,
+                    category=ErrorCategory.EXTERNAL_SERVICE
+                )
+        
+        try:
+            result = func(*args, **kwargs)
+            self._on_success()
+            return result
+            
+        except self.expected_exception as e:
+            self._on_failure()
+            raise
     
     async def call(self, func: Callable, *args, **kwargs) -> Any:
         """Execute function with circuit breaker protection."""
@@ -359,7 +383,7 @@ class ErrorHandler:
         if error_context.retry_count < max_retries:
             wait_time = 2 ** error_context.retry_count
             logger.info(f"Retrying network operation in {wait_time} seconds...")
-            time.sleep(wait_time)
+            # Note: Actual waiting should be handled by the caller
             error_context.retry_count += 1
             return {"retry": True, "wait_time": wait_time}
         
@@ -367,14 +391,15 @@ class ErrorHandler:
     
     def _recover_api_error(self, error_context: ErrorContext) -> Optional[Any]:
         """Recover from API errors."""
-        status_code = error_context.metadata.get("status_code")
+        metadata = error_context.metadata or {}
+        status_code = metadata.get("status_code")
         
         # Retry on 5xx errors
         if status_code and 500 <= status_code < 600:
             if error_context.retry_count < 2:
                 wait_time = 5 * (error_context.retry_count + 1)
                 logger.info(f"Retrying API call in {wait_time} seconds...")
-                time.sleep(wait_time)
+                # Note: Actual waiting should be handled by the caller
                 error_context.retry_count += 1
                 return {"retry": True, "wait_time": wait_time}
         
@@ -388,7 +413,8 @@ class ErrorHandler:
     def _recover_parsing_error(self, error_context: ErrorContext) -> Optional[Any]:
         """Recover from parsing errors."""
         # Try alternative parsing method
-        content_type = error_context.metadata.get("content_type")
+        metadata = error_context.metadata or {}
+        content_type = metadata.get("content_type")
         
         if content_type == "html":
             logger.info("Trying alternative HTML parser...")
@@ -477,7 +503,7 @@ def with_circuit_breaker(service: str):
         
         def sync_wrapper(*args, **kwargs):
             circuit_breaker = error_handler.get_circuit_breaker(service)
-            return circuit_breaker.call(func, *args, **kwargs)
+            return circuit_breaker.call_sync(func, *args, **kwargs)
         
         return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
     return decorator
@@ -490,7 +516,7 @@ def retry_on_network_error(max_attempts: int = 3):
         stop=stop_after_attempt(max_attempts),
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type((ConnectionError, TimeoutError, NetworkError)),
-        before_sleep=before_sleep_log(logger, "WARNING")
+        before_sleep=before_sleep_log(logging.getLogger(__name__), logging.WARNING)
     )
 
 
@@ -500,7 +526,7 @@ def retry_on_api_error(max_attempts: int = 3):
         stop=stop_after_attempt(max_attempts),
         wait=wait_exponential(multiplier=2, min=1, max=30),
         retry=retry_if_exception_type(APIError),
-        before_sleep=before_sleep_log(logger, "WARNING")
+        before_sleep=before_sleep_log(logging.getLogger(__name__), logging.WARNING)
     )
 
 

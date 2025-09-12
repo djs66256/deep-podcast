@@ -9,7 +9,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Optional, cast, Union
 
 import httpx
 from bs4 import BeautifulSoup
@@ -42,6 +42,10 @@ async def duckduckgo_search(query: str, max_results: int = 10) -> List[Dict[str,
         List of search results with title, url, snippet
     """
     try:
+        if not query or not query.strip():
+            logger.warning("Empty search query provided")
+            return []
+            
         runtime = get_runtime(Context)
         max_results = min(max_results, runtime.context.max_search_results)
         
@@ -138,18 +142,31 @@ async def fetch_webpage_content(url: str, timeout: int = 15) -> Optional[Dict[st
             meta_description = ""
             desc_tag = soup.find('meta', attrs={'name': 'description'}) or soup.find('meta', attrs={'property': 'og:description'})
             if desc_tag:
-                meta_description = desc_tag.get('content', '')
+                try:
+                    # Type cast to handle BeautifulSoup element types
+                    element = cast(Any, desc_tag)
+                    meta_description = element.get('content', '') if hasattr(element, 'get') else getattr(element, 'attrs', {}).get('content', '')
+                except (AttributeError, TypeError):
+                    meta_description = ""
             
             # Extract keywords
             keywords_tag = soup.find('meta', attrs={'name': 'keywords'})
-            keywords = keywords_tag.get('content', '').split(',') if keywords_tag else []
-            keywords = [kw.strip() for kw in keywords if kw.strip()]
+            keywords = []
+            if keywords_tag:
+                try:
+                    # Type cast to handle BeautifulSoup element types
+                    element = cast(Any, keywords_tag)
+                    content = element.get('content', '') if hasattr(element, 'get') else getattr(element, 'attrs', {}).get('content', '')
+                    if content:
+                        keywords = [kw.strip() for kw in str(content).split(',') if kw.strip()]
+                except (AttributeError, TypeError):
+                    keywords = []
             
             content_data = {
                 'url': url,
                 'title': sanitize_text(title),
                 'content': main_content,
-                'meta_description': sanitize_text(meta_description),
+                'meta_description': sanitize_text(str(meta_description) if meta_description else ""),
                 'keywords': keywords,
                 'domain': extract_domain(url),
                 'content_length': len(main_content),
@@ -180,9 +197,18 @@ async def batch_crawl_urls(urls: List[str], max_concurrent: int = 5) -> List[Dic
     Returns:
         List of successfully crawled content
     """
+    if not urls:
+        logger.warning("No URLs provided for crawling")
+        return []
+    
     runtime = get_runtime(Context)
     timeout = runtime.context.crawl_timeout
     min_length = runtime.context.content_min_length
+    
+    # Validate URLs before crawling
+    valid_urls = [url for url in urls if validate_url(url)]
+    if len(valid_urls) != len(urls):
+        logger.warning(f"Filtered out {len(urls) - len(valid_urls)} invalid URLs")
     
     semaphore = asyncio.Semaphore(max_concurrent)
     
@@ -193,9 +219,9 @@ async def batch_crawl_urls(urls: List[str], max_concurrent: int = 5) -> List[Dic
                 return content
             return None
     
-    logger.info(f"Starting batch crawl of {len(urls)} URLs")
+    logger.info(f"Starting batch crawl of {len(valid_urls)} valid URLs")
     
-    tasks = [crawl_with_semaphore(url) for url in urls]
+    tasks = [crawl_with_semaphore(url) for url in valid_urls]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     
     # Filter successful results
@@ -206,7 +232,7 @@ async def batch_crawl_urls(urls: List[str], max_concurrent: int = 5) -> List[Dic
         elif isinstance(result, Exception):
             logger.debug(f"Crawl task failed: {result}")
     
-    logger.info(f"Successfully crawled {len(crawled_content)} out of {len(urls)} URLs")
+    logger.info(f"Successfully crawled {len(crawled_content)} out of {len(valid_urls)} valid URLs")
     return crawled_content
 
 
@@ -237,8 +263,51 @@ async def extract_key_information(content_list: List[Dict[str, Any]]) -> Dict[st
     for word in words:
         word_freq[word] = word_freq.get(word, 0) + 1
     
-    # Get most frequent meaningful words
-    common_words = {'that', 'this', 'with', 'from', 'they', 'have', 'were', 'been', 'their', 'said', 'each', 'would', 'there', 'what', 'about', 'which', 'when', 'one', 'all', 'first', 'also', 'after', 'back', 'other', 'many', 'than', 'then', 'them', 'these', 'some', 'her', 'would', 'make', 'like', 'into', 'him', 'has', 'two', 'more', 'very', 'what', 'know', 'just', 'first', 'get', 'over', 'think', 'also', 'your', 'work', 'life', 'only', 'can', 'still', 'should', 'after', 'being', 'now', 'made', 'before', 'here', 'through', 'when', 'where', 'much', 'those', 'take', 'most', 'way', 'find', 'use', 'her', 'may', 'even', 'give', 'same', 'any', 'under', 'might', 'while', 'last', 'could', 'great', 'little', 'good', 'come', 'such', 'see', 'need', 'place', 'right', 'want', 'look', 'few', 'new', 'part', 'case', 'seem', 'call', 'include', 'long', 'put', 'end', 'why', 'try', 'turn', 'ask', 'help', 'different', 'number', 'next', 'early', 'course', 'important', 'possible', 'hand', 'example', 'either', 'far', 'local', 'large', 'another', 'available', 'major', 'result', 'big', 'group', 'around', 'however', 'home', 'small', 'every', 'following', 'since', 'without', 'public', 'system', 'although', 'both', 'during', 'such', 'point', 'sort', 'change', 'best', 'within', 'often', 'high', 'between', 'level', 'process', 'almost', 'today', 'house', 'country', 'keep', 'never', 'american', 'general', 'social', 'however', 'among', 'information', 'government', 'million', 'least', 'several', 'second', 'something', 'set', 'study', 'full', 'later', 'week', 'year', 'state', 'control', 'always', 'person', 'policy', 'company', 'likely', 'economic', 'political', 'human', 'actually', 'business', 'university', 'able', 'become', 'line', 'question', 'include', 'service', 'national', 'development', 'research', 'although', 'analysis', 'report', 'percent', 'according', 'provide', 'particularly', 'therefore', 'increase', 'experience', 'including', 'order', 'interest', 'recent', 'finally', 'probably', 'certain', 'current', 'rather', 'quality', 'really', 'value', 'decision', 'usually', 'program', 'society', 'often', 'community', 'especially', 'problem', 'various', 'history', 'technology', 'activity', 'growth', 'market', 'support', 'industry', 'global', 'family', 'education', 'member', 'relationship', 'future', 'quite', 'certainly', 'project', 'position', 'method', 'clear', 'continue', 'design', 'particular', 'individual', 'management', 'power', 'build', 'allow', 'potential', 'health', 'approach', 'opportunity', 'understand', 'performance', 'impact', 'financial', 'model', 'create', 'effect', 'international', 'culture', 'success', 'organization', 'idea', 'modern', 'role', 'focus', 'energy', 'security', 'structure', 'issue', 'similar', 'training', 'response', 'purpose', 'improve', 'team', 'though', 'across', 'application', 'significant', 'data', 'economic', 'force', 'instead', 'legal', 'professional', 'region', 'knowledge', 'consider', 'environment', 'investment', 'type', 'agreement', 'specific', 'standard', 'institution', 'nature', 'software', 'computer', 'network', 'customer', 'cost', 'resource', 'price', 'risk', 'technology', 'equipment', 'conference', 'equipment', 'forward', 'industry', 'leadership', 'maintain', 'pressure', 'production', 'range', 'responsibility', 'school', 'simple', 'traditional', 'additional', 'balance', 'board', 'challenge', 'commission', 'detail', 'expert', 'factor', 'generation', 'indeed', 'meeting', 'offer', 'operation', 'private', 'represent', 'science', 'staff', 'strategy', 'task', 'material', 'media', 'physical', 'product', 'quality', 'requirement', 'series', 'skill', 'source', 'successful', 'tend', 'tool', 'trend'}
+    # Get most frequent meaningful words (excluding common stop words)
+    common_words = {
+        'that', 'this', 'with', 'from', 'they', 'have', 'were', 'been', 'their', 'said', 
+        'each', 'would', 'there', 'what', 'about', 'which', 'when', 'where', 'will',
+        'more', 'some', 'very', 'also', 'just', 'only', 'other', 'first', 'after', 
+        'make', 'like', 'into', 'over', 'think', 'your', 'work', 'life', 'being',
+        'made', 'before', 'here', 'through', 'much', 'those', 'take', 'most', 'find',
+        'same', 'even', 'give', 'under', 'might', 'while', 'last', 'could', 'great',
+        'good', 'come', 'such', 'need', 'place', 'right', 'want', 'look', 'part',
+        'seem', 'call', 'include', 'long', 'different', 'number', 'next', 'early',
+        'important', 'possible', 'example', 'either', 'local', 'large', 'another',
+        'available', 'major', 'result', 'group', 'around', 'however', 'home', 'small',
+        'every', 'following', 'since', 'without', 'public', 'system', 'although',
+        'both', 'during', 'point', 'change', 'best', 'within', 'often', 'high',
+        'between', 'level', 'process', 'almost', 'today', 'house', 'country', 'keep',
+        'never', 'american', 'general', 'social', 'among', 'information', 'government',
+        'million', 'least', 'several', 'second', 'something', 'study', 'full', 'later',
+        'week', 'year', 'state', 'control', 'always', 'person', 'policy', 'company',
+        'likely', 'economic', 'political', 'human', 'actually', 'business', 'university',
+        'able', 'become', 'line', 'question', 'service', 'national', 'development',
+        'research', 'analysis', 'report', 'percent', 'according', 'provide',
+        'particularly', 'therefore', 'increase', 'experience', 'including', 'order',
+        'interest', 'recent', 'finally', 'probably', 'certain', 'current', 'rather',
+        'quality', 'really', 'value', 'decision', 'usually', 'program', 'society',
+        'community', 'especially', 'problem', 'various', 'history', 'technology',
+        'activity', 'growth', 'market', 'support', 'industry', 'global', 'family',
+        'education', 'member', 'relationship', 'future', 'quite', 'certainly',
+        'project', 'position', 'method', 'clear', 'continue', 'design', 'particular',
+        'individual', 'management', 'power', 'build', 'allow', 'potential', 'health',
+        'approach', 'opportunity', 'understand', 'performance', 'impact', 'financial',
+        'model', 'create', 'effect', 'international', 'culture', 'success',
+        'organization', 'idea', 'modern', 'role', 'focus', 'energy', 'security',
+        'structure', 'issue', 'similar', 'training', 'response', 'purpose', 'improve',
+        'team', 'though', 'across', 'application', 'significant', 'data', 'force',
+        'instead', 'legal', 'professional', 'region', 'knowledge', 'consider',
+        'environment', 'investment', 'type', 'agreement', 'specific', 'standard',
+        'institution', 'nature', 'software', 'computer', 'network', 'customer',
+        'cost', 'resource', 'price', 'risk', 'equipment', 'conference', 'forward',
+        'leadership', 'maintain', 'pressure', 'production', 'range', 'responsibility',
+        'school', 'simple', 'traditional', 'additional', 'balance', 'board',
+        'challenge', 'commission', 'detail', 'expert', 'factor', 'generation',
+        'indeed', 'meeting', 'offer', 'operation', 'private', 'represent', 'science',
+        'staff', 'strategy', 'task', 'material', 'media', 'physical', 'product',
+        'requirement', 'series', 'skill', 'source', 'successful', 'tend', 'tool', 'trend'
+    }
     
     key_terms = []
     for word, freq in sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:20]:
@@ -272,12 +341,30 @@ async def generate_markdown_report(
     Returns:
         Formatted markdown report
     """
+    if not topic or not topic.strip():
+        topic = "未知主题"
+        
+    if not analyzed_content:
+        analyzed_content = {
+            'total_sources': 0,
+            'total_words': 0,
+            'domains_covered': [],
+            'key_terms': [],
+            'average_quality': 0,
+            'summary': '暂无分析内容'
+        }
+        
+    if not sources:
+        sources = []
     timestamp = datetime.now().strftime("%Y年%m月%d日 %H:%M")
     
     # Format sources
     sources_text = ""
     for i, source in enumerate(sources, 1):
-        sources_text += f"{i}. [{source['title']}]({source['url']}) - {source['domain']}\n"
+        title = source.get('title', 'Unknown Title')
+        url = source.get('url', '#')
+        domain = source.get('domain', 'unknown')
+        sources_text += f"{i}. [{title}]({url}) - {domain}\n"
     
     # Format key terms
     key_terms_text = ""
