@@ -1,9 +1,9 @@
 [project]
-name = "react-agent"
-version = "0.0.1"
-description = "Starter template for making a custom Reasoning and Action agent (using tool calling) in LangGraph."
+name = "deep-podcast-system"
+version = "0.1.0"
+description = "A multi-agent system for generating in-depth research reports and converting them into podcast content with TTS."
 authors = [
-    { name = "William Fu-Hinthorn", email = "13333726+hinthornw@users.noreply.github.com" },
+    { name = "Deep Podcast Team", email = "team@deeppodcast.ai" },
 ]
 readme = "README.md"
 license = { text = "MIT" }
@@ -13,9 +13,30 @@ dependencies = [
     "langchain-openai>=0.1.22",
     "langchain-anthropic>=0.1.23",
     "langchain>=0.2.14",
-    "langchain-fireworks>=0.1.7",
+    "langchain-community>=0.2.14",
     "python-dotenv>=1.0.1",
     "langchain-tavily>=0.1",
+    # Web scraping and search
+    "duckduckgo-search>=5.0.0",
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=4.9.0",
+    "html2text>=2020.1.16",
+    # Data processing
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    # TTS and Audio processing
+    "requests>=2.31.0",  # For Qwen TTS API calls
+    "pydub>=0.25.1",
+    "ffmpeg-python>=0.2.0",
+    # File handling
+    "pathlib>=1.0.1",
+    "aiofiles>=23.0.0",
+    # Utilities
+    "pydantic>=2.0.0",
+    "loguru>=0.7.0",
+    "tenacity>=8.2.0",
+    "httpx>=0.25.0",
 ]
 
 
@@ -27,10 +48,12 @@ requires = ["setuptools>=73.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["langgraph.templates.react_agent", "react_agent"]
+packages = ["deep_podcast", "deep_research", "podcast", "shared"]
 [tool.setuptools.package-dir]
-"langgraph.templates.react_agent" = "src/react_agent"
-"react_agent" = "src/react_agent"
+"deep_podcast" = "src/deep_podcast"
+"deep_research" = "src/deep_research"
+"podcast" = "src/podcast"
+"shared" = "src/shared"
 
 
 [tool.setuptools.package-data]
@@ -64,8 +87,14 @@ convention = "google"
 dev = [
     "langgraph-cli[inmem]>=0.1.71",
     "pytest>=8.3.5",
+    "pytest-asyncio>=0.21.0",
+    "pytest-mock>=3.11.1",
+    "pytest-cov>=4.1.0",
+    "mypy>=1.11.1",
+    "ruff>=0.6.1",
 ]
 
-[[tool.uv.index]]
-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
-default = true
+[tool.uv]
+index-url = "https://pypi.org/simple"
+extra-index-url = ["https://pypi.tuna.tsinghua.edu.cn/simple"]
+
