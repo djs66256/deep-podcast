@@ -23,6 +23,19 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
 
+# Helper functions for sync operations in async context
+def _sync_write_file(file_path: Path, content: str) -> None:
+    """Synchronous file write helper."""
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+
+
+def _sync_read_file(file_path: Union[str, Path]) -> str:
+    """Synchronous file read helper."""
+    with open(file_path, 'r', encoding='utf-8') as f:
+        return f.read()
+
+
 def generate_task_id() -> str:
     """Generate a unique task ID."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -73,7 +86,9 @@ def generate_timestamped_filename(
 async def ensure_directory(path: Union[str, Path]) -> Path:
     """Ensure directory exists asynchronously."""
     directory = Path(path)
-    directory.mkdir(parents=True, exist_ok=True)
+    
+    # Use asyncio.to_thread to make the blocking mkdir operation async
+    await asyncio.to_thread(directory.mkdir, parents=True, exist_ok=True)
     return directory
 
 
@@ -87,9 +102,8 @@ async def save_text_file(content: str, file_path: Union[str, Path]) -> bool:
             async with aiofiles.open(file_path, 'w', encoding='utf-8') as f:
                 await f.write(content)
         else:
-            # Fallback to synchronous write
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(content)
+            # Fallback to async thread-based write
+            await asyncio.to_thread(_sync_write_file, file_path, content)
         
         logger.info(f"Successfully saved file: {file_path}")
         return True
@@ -105,9 +119,8 @@ async def load_text_file(file_path: Union[str, Path]) -> Optional[str]:
             async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
                 content = await f.read()
         else:
-            # Fallback to synchronous read
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            # Fallback to async thread-based read
+            content = await asyncio.to_thread(_sync_read_file, file_path)
         return content
     except Exception as e:
         logger.error(f"Failed to load file {file_path}: {e}")
@@ -252,7 +265,7 @@ async def retry_async(
     exceptions: tuple = (Exception,)
 ) -> Any:
     """Retry async function with exponential backoff."""
-    last_exception = None
+    last_exception: Optional[Exception] = None
     
     for attempt in range(max_retries + 1):
         try:
@@ -266,7 +279,10 @@ async def retry_async(
             logger.warning(f"Attempt {attempt + 1} failed: {e}. Retrying in {wait_time:.1f}s...")
             await asyncio.sleep(wait_time)
     
-    raise last_exception
+    if last_exception:
+        raise last_exception
+    else:
+        raise Exception("Function failed after all retries")
 
 
 def extract_key_points(text: str, max_points: int = 10) -> List[str]:

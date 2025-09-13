@@ -43,4 +43,22 @@ class Context:
                 continue
 
             if getattr(self, f.name) == f.default:
-                setattr(self, f.name, os.environ.get(f.name.upper(), f.default))
+                env_value = os.environ.get(f.name.upper(), f.default)
+                # Convert to appropriate type based on field type
+                if f.type == int or str(f.type) == "<class 'int'>" or str(f.type) == 'int':
+                    try:
+                        if isinstance(env_value, str):
+                            env_value = int(env_value)
+                    except (ValueError, TypeError):
+                        env_value = f.default
+                elif f.type == float or str(f.type) == "<class 'float'>" or str(f.type) == 'float':
+                    try:
+                        if isinstance(env_value, str):
+                            env_value = float(env_value)
+                    except (ValueError, TypeError):
+                        env_value = f.default
+                elif f.type == bool or str(f.type) == "<class 'bool'>" or str(f.type) == 'bool':
+                    if isinstance(env_value, str):
+                        env_value = env_value.lower() in ('true', '1', 'yes', 'on')
+                
+                setattr(self, f.name, env_value)

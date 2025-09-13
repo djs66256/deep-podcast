@@ -44,7 +44,7 @@ async def initialize_task(state: State, runtime: Runtime[Context]) -> Dict[str, 
         task_id = generate_task_id()
         
         # Validate topic
-        model = load_chat_model(runtime.context.model)
+        model = load_chat_model()
         validation_prompt = TOPIC_VALIDATION_PROMPT.format(topic=state.user_topic)
         
         validation_response = cast(
@@ -225,7 +225,7 @@ async def finalize_results(state: State, runtime: Runtime[Context]) -> Dict[str,
         )
         
         # Generate completion summary
-        model = load_chat_model(runtime.context.model)
+        model = load_chat_model()
         summary_prompt = FINAL_RESULT_PROMPT.format(
             topic=state.user_topic,
             start_time=state.start_time.strftime("%Y-%m-%d %H:%M:%S") if state.start_time else "Unknown",

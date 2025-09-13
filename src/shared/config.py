@@ -131,7 +131,8 @@ class ConfigurationManager:
             api_key = os.getenv("ANTHROPIC_API_KEY", "")
         elif provider == "openai":
             default_model = "gpt-4-turbo-preview"
-            api_key = os.getenv("OPENAI_API_KEY", "")
+            # For OpenAI provider, try OPENAI_API_KEY first, then fallback to LLM_API_KEY (for custom APIs like DashScope)
+            api_key = os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY", "")
         else:
             default_model = "claude-3-5-sonnet-20240620"
             api_key = os.getenv("LLM_API_KEY", "")

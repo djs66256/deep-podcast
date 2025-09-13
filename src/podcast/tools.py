@@ -61,7 +61,7 @@ async def analyze_research_report(report_content: str) -> Dict[str, Any]:
         if not report_content or len(report_content) < 100:
             return {"error": "Report content is too short or empty"}
         
-        model = load_chat_model(runtime.context.model)
+        model = load_chat_model()
         
         prompt = KEY_POINTS_EXTRACTION_PROMPT.format(report_content=report_content)
         
@@ -159,7 +159,7 @@ async def design_podcast_characters(topic: str, key_points: List[Dict[str, Any]]
         runtime = get_runtime(Context)
         logger.info(f"Designing podcast characters for topic: {topic}")
         
-        model = load_chat_model(runtime.context.model)
+        model = load_chat_model()
         
         # Analyze topic characteristics
         topic_characteristics = _analyze_topic_characteristics(topic, key_points)
@@ -314,7 +314,7 @@ async def generate_podcast_script(
         runtime = get_runtime(Context)
         logger.info(f"Generating podcast script for topic: {topic}")
         
-        model = load_chat_model(runtime.context.model)
+        model = load_chat_model()
         
         prompt = SCRIPT_GENERATION_PROMPT.format(
             topic=topic,
@@ -424,7 +424,7 @@ async def segment_script_for_tts(script_content: str) -> List[DialogSegment]:
         runtime = get_runtime(Context)
         logger.info("Segmenting script for TTS processing")
         
-        model = load_chat_model(runtime.context.model)
+        model = load_chat_model()
         
         prompt = AUDIO_SEGMENTATION_PROMPT.format(script_content=script_content)
         

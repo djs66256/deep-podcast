@@ -45,7 +45,7 @@ async def analyze_topic(state: State, runtime: Runtime[Context]) -> Dict[str, An
         if not state.topic:
             return {"errors": ["No research topic provided"]}
         
-        model = load_chat_model(runtime.context.model)
+        model = load_chat_model()
         
         prompt = SEARCH_QUERY_PROMPT.format(topic=state.topic)
         
@@ -186,7 +186,7 @@ async def generate_report(state: State, runtime: Runtime[Context]) -> Dict[str, 
             return {"errors": ["No analyzed content available for report generation"]}
         
         # Generate report using LLM
-        model = load_chat_model(runtime.context.model)
+        model = load_chat_model()
         
         prompt = REPORT_GENERATION_PROMPT.format(
             topic=state.topic,
