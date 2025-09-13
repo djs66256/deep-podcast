@@ -23,6 +23,7 @@ from deep_research.context import Context
 from shared.models import ResearchReport
 from shared.utils import (
     calculate_content_score,
+    ensure_directory,
     extract_domain,
     generate_timestamped_filename,
     sanitize_text,
@@ -53,7 +54,10 @@ async def duckduckgo_search(query: str, max_results: int = 10) -> List[Dict[str,
         
         with DDGS() as ddgs:
             results = []
-            for result in ddgs.text(query, max_results=max_results):
+            for result in ddgs.text(query, max_results=max_results, region='us-en'):
+                # 包含 zhihu 的链接，不作为结果
+                if 'zhihu' in result.get('href', ''):
+                    continue
                 if validate_url(result.get('href', '')):
                     results.append({
                         'title': sanitize_text(result.get('title', '')),
@@ -475,7 +479,7 @@ async def save_research_report(report_content: str, topic: str) -> str:
     try:
         runtime = get_runtime(Context)
         output_dir = Path(runtime.context.output_base_dir) / "research_reports"
-        output_dir.mkdir(parents=True, exist_ok=True)
+        await ensure_directory(output_dir)
         
         filename = generate_timestamped_filename("research", topic, ".md")
         file_path = output_dir / filename

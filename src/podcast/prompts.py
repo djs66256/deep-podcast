@@ -41,11 +41,19 @@ KEY_POINTS_EXTRACTION_PROMPT = """请分析以下研究报告，提取关键要�
 5. 趋势预测和影响
 6. 争议点和不同观点
 
-返回结构化的要点列表，每个要点包含：
-- 标题
-- 简要说明
-- 重要程度（1-5分）
-- 适合讨论的角度"""
+请严格按照以下JSON格式返回结果，不要包含任何其他文本：
+{{
+  "key_points": [
+    {{
+      "title": "要点标题",
+      "description": "详细说明",
+      "importance": 4,
+      "discussion_angle": "适合讨论的角度"
+    }}
+  ]
+}}
+
+注意：必须返回有效的JSON格式，确保提取到足够的关键要点（至少3-5个）。"""
 
 CHARACTER_DESIGN_PROMPT = """基于研究话题 "{topic}" 和内容特点，设计两个播客角色。
 
@@ -64,7 +72,7 @@ CHARACTER_DESIGN_PROMPT = """基于研究话题 "{topic}" 和内容特点，设�
    - 表达特点
    - 独特视角
 
-返回JSON格式的角色设定。"""
+返回JSON格式的角色设定，不要包含```json。"""
 
 SCRIPT_GENERATION_PROMPT = """基于以下信息，生成完整的播客对话脚本。
 
@@ -115,9 +123,6 @@ SCRIPT_GENERATION_PROMPT = """基于以下信息，生成完整的播客对话�
 
 AUDIO_SEGMENTATION_PROMPT = """请将以下播客脚本分割为适合TTS合成的音频片段。
 
-脚本内容：
-{script_content}
-
 分割原则：
 1. 按说话人分割
 2. 每段长度适中（建议100-300字）
@@ -125,18 +130,23 @@ AUDIO_SEGMENTATION_PROMPT = """请将以下播客脚本分割为适合TTS合成�
 4. 标注情感色彩
 5. 标记停顿和语调
 
-返回JSON格式的分段信息：
+请严格按照以下JSON格式返回，不要包含任何其他文本：
 [
-  {
+  {{
     "segment_id": 1,
     "speaker": "主持人",
     "content": "对话内容",
-    "emotion": "neutral/excited/serious/curious",
+    "emotion": "neutral",
     "duration_estimate": 15,
-    "voice_config": {
+    "voice_config": {{
       "rate": 1.0,
       "pitch": 0,
       "volume": 1.0
-    }
-  }
-]"""
+    }}
+  }}
+]
+
+注意：必须返回有效的JSON数组格式，包含所有片段内容，不要包含```json，情感值可以是: neutral, excited, serious, curious, friendly。
+
+脚本内容：
+{script_content}"""

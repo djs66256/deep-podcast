@@ -31,6 +31,7 @@ from podcast.tools import (
     save_podcast_script,
     segment_script_for_tts,
     synthesize_speech_qwen,
+    _async_file_exists,
 )
 from shared.models import DialogSegment, PodcastScript, Character
 from shared.utils import ensure_directory, generate_timestamped_filename
@@ -169,10 +170,20 @@ async def process_audio_segments(state: State, runtime: Runtime[Context]) -> Dic
         audio_segments = []
         failed_segments = 0
         
-        # Create character voice mapping
-        voice_mapping = {}
+        # Determine voice models from characters
+        host_voice = "xiaoyun"
+        guest_voice = "xiaogang"
+        
         for character in state.characters:
-            voice_mapping[character.name] = character.voice_config.get("model", "xiaoyun")
+            role = character.role.lower()
+            voice_model = character.voice_config.get("model", "xiaoyun")
+            
+            if "主持" in role or "host" in role:
+                host_voice = voice_model
+            elif "嘉宾" in role or "guest" in role or "专家" in role:
+                guest_voice = voice_model
+        
+        logger.info(f"Voice assignment: Host={host_voice}, Guest={guest_voice}")
         
         # Process segments in batches to avoid overwhelming the TTS service
         batch_size = 5
@@ -182,9 +193,17 @@ async def process_audio_segments(state: State, runtime: Runtime[Context]) -> Dic
             # Process batch concurrently
             tasks = []
             for segment in batch:
-                voice_model = voice_mapping.get(segment.speaker, "xiaoyun")
-                output_filename = f"segment_{segment.segment_id:03d}.mp3"
+                # Assign voice based on speaker keywords
+                speaker_lower = segment.speaker.lower()
+                if "主持" in speaker_lower or "host" in speaker_lower:
+                    voice_model = host_voice
+                elif "嘉宾" in speaker_lower or "专家" in speaker_lower or "guest" in speaker_lower:
+                    voice_model = guest_voice
+                else:
+                    # Alternate between voices for unknown speakers
+                    voice_model = host_voice if segment.segment_id % 2 == 1 else guest_voice
                 
+                output_filename = f"segment_{segment.segment_id:03d}.mp3"
                 task = synthesize_speech_qwen(
                     text=segment.content,
                     voice_model=voice_model,
@@ -260,7 +279,7 @@ async def combine_final_audio(state: State, runtime: Runtime[Context]) -> Dict[s
         
         for segment in sorted_segments:
             audio_file = segment.get("audio_file")
-            if audio_file and Path(audio_file).exists():
+            if audio_file and await _async_file_exists(Path(audio_file)):
                 audio_files.append(audio_file)
             else:
                 logger.warning(f"Audio file not found for segment {segment.get('segment_id')}")
@@ -281,7 +300,9 @@ async def combine_final_audio(state: State, runtime: Runtime[Context]) -> Dict[s
         if runtime.context.cleanup_temp:
             try:
                 for audio_file in audio_files:
-                    Path(audio_file).unlink(missing_ok=True)
+                    await asyncio.to_thread(
+                        lambda f=audio_file: Path(f).unlink(missing_ok=True)
+                    )
                 logger.debug("Cleaned up temporary audio files")
             except Exception as e:
                 logger.warning(f"Failed to cleanup temporary files: {e}")

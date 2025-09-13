@@ -163,7 +163,7 @@ class ConfigurationManager:
         return TTSConfig(
             provider=os.getenv("TTS_PROVIDER", "qwen"),
             api_key=os.getenv("QWEN_TTS_API_KEY", ""),
-            base_url=os.getenv("QWEN_TTS_BASE_URL", "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2speech/synthesis"),
+            base_url=os.getenv("QWEN_TTS_BASE_URL", "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"),
             voice_models=voice_models,
             audio_format=os.getenv("TTS_AUDIO_FORMAT", "mp3"),
             sample_rate=int(os.getenv("TTS_SAMPLE_RATE", "16000")),
@@ -253,7 +253,8 @@ class ConfigurationManager:
         
         for directory in directories:
             try:
-                Path(directory).mkdir(parents=True, exist_ok=True)
+                import asyncio
+                asyncio.create_task(asyncio.to_thread(Path(directory).mkdir, parents=True, exist_ok=True))
                 logger.debug(f"Created directory: {directory}")
             except Exception as e:
                 logger.warning(f"Failed to create directory {directory}: {e}")

@@ -22,7 +22,8 @@ def setup_test_environment():
     
     # Create test output directory
     test_output_dir = Path("./test_outputs")
-    test_output_dir.mkdir(exist_ok=True)
+    import asyncio
+    asyncio.run(asyncio.to_thread(test_output_dir.mkdir, exist_ok=True))
     
     # Set environment variables for testing
     os.environ["OUTPUT_BASE_DIR"] = str(test_output_dir)

@@ -2,6 +2,7 @@
 
 import re
 import hashlib
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -99,10 +100,10 @@ def generate_filename(topic: str, extension: str = ".md") -> str:
     return f"{timestamp}_{clean_topic}_{topic_hash}{extension}"
 
 
-def ensure_output_dir(base_dir: str) -> Path:
+async def ensure_output_dir(base_dir: str) -> Path:
     """Ensure output directory exists and return Path object."""
     output_dir = Path(base_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    await asyncio.to_thread(output_dir.mkdir, parents=True, exist_ok=True)
     return output_dir
 
 

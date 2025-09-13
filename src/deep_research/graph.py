@@ -47,7 +47,7 @@ async def analyze_topic(state: State, runtime: Runtime[Context]) -> Dict[str, An
         
         model = load_chat_model()
         
-        prompt = SEARCH_QUERY_PROMPT.format(topic=state.topic)
+        prompt = SEARCH_QUERY_PROMPT.format(topic=state.topic, system_time=datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S'))
         
         response = cast(
             AIMessage,

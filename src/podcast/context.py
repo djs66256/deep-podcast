@@ -64,7 +64,7 @@ class Context:
     )
 
     qwen_tts_base_url: str = field(
-        default="https://dashscope.aliyuncs.com/api/v1/services/aigc/text2speech/synthesis",
+        default="https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
         metadata={
             "description": "Base URL for Qwen TTS API."
         },

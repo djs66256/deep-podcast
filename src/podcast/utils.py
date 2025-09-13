@@ -3,6 +3,7 @@
 import re
 import json
 import hashlib
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -61,12 +62,23 @@ def load_chat_model(fully_specified_name: Optional[str] = None) -> BaseChatModel
 
 def estimate_reading_time(text: str, words_per_minute: int = 180) -> int:
     """Estimate reading time in seconds for given text."""
-    # Count words (simplified)
-    word_count = len(text.split())
+    if not text or not text.strip():
+        return 5  # Minimum 5 seconds for empty text
     
-    # Calculate time in seconds
-    time_minutes = word_count / words_per_minute
-    return int(time_minutes * 60)
+    # For Chinese text, count characters instead of words
+    # Chinese speakers read about 200-300 characters per minute
+    chinese_char_count = len([c for c in text if '\u4e00' <= c <= '\u9fff'])
+    
+    if chinese_char_count > len(text) * 0.5:  # Mostly Chinese text
+        # Chinese text: ~250 characters per minute
+        time_minutes = chinese_char_count / 250
+    else:
+        # English text: count words
+        word_count = len(text.split())
+        time_minutes = word_count / words_per_minute
+    
+    # Calculate time in seconds, minimum 3 seconds
+    return max(3, int(time_minutes * 60))
 
 
 def clean_dialog_text(text: str) -> str:
@@ -152,10 +164,10 @@ def generate_script_filename(topic: str, extension: str = ".md") -> str:
     return f"podcast_{timestamp}_{clean_topic}_{topic_hash}{extension}"
 
 
-def ensure_output_dir(base_dir: str, subdir: str = "podcast") -> Path:
+async def ensure_output_dir(base_dir: str, subdir: str = "podcast") -> Path:
     """Ensure output directory exists."""
     output_dir = Path(base_dir) / subdir
-    output_dir.mkdir(parents=True, exist_ok=True)
+    await asyncio.to_thread(output_dir.mkdir, parents=True, exist_ok=True)
     return output_dir
 
 
