@@ -5,9 +5,13 @@ This module implements the main controller that coordinates:
 2. Podcast sub-graph for converting reports to podcast content  
 3. Progress tracking and error handling
 4. Final result compilation and delivery
+
+This implementation uses LangGraph's subgraph functionality to directly
+compose the deep_research and podcast graphs as nodes in the main workflow.
 """
 
 import asyncio
+import os
 from datetime import datetime, UTC
 from pathlib import Path
 from typing import Dict, List, Literal, cast, Any
@@ -31,6 +35,10 @@ from shared.models import (
     TaskStatus,
 )
 from shared.utils import generate_task_id, ensure_directory
+
+# Import subgraphs
+from deep_research.graph import graph as research_graph
+from podcast.graph import graph as podcast_graph
 
 async def initialize_task(state: State, runtime: Runtime[Context]) -> Dict[str, Any]:
     """Initialize the podcast generation task with validation and setup."""
@@ -81,10 +89,10 @@ async def initialize_task(state: State, runtime: Runtime[Context]) -> Dict[str, 
         return {"errors": [f"Task initialization failed: {str(e)}"]}
 
 
-async def execute_research_phase(state: State, runtime: Runtime[Context]) -> Dict[str, Any]:
-    """Execute the deep research phase using the research sub-graph."""
+async def execute_research_subgraph(state: State, runtime: Runtime[Context]) -> Dict[str, Any]:
+    """Execute the deep research subgraph and map its results."""
     try:
-        logger.info(f"Starting research phase for task {state.task_id}")
+        logger.info(f"Starting research subgraph for task {state.task_id}")
         
         # Update progress
         progress = GenerationProgress(
@@ -95,9 +103,9 @@ async def execute_research_phase(state: State, runtime: Runtime[Context]) -> Dic
             detailed_status="正在进行网络搜索和内容分析"
         )
         
-        # Import and call research sub-graph
-        from deep_research.graph import graph as research_graph
+        # Import research state and context for proper input
         from deep_research.state import InputState as ResearchInputState
+        from deep_research.context import Context as ResearchContext
         
         # Prepare research input
         research_input = ResearchInputState(
@@ -105,22 +113,27 @@ async def execute_research_phase(state: State, runtime: Runtime[Context]) -> Dic
             messages=[HumanMessage(content=f"请对'{state.user_topic}'进行深度研究分析")]
         )
         
-        # Execute research sub-graph
+        # Execute research subgraph with proper context
         research_result = await research_graph.ainvoke(
             research_input,
-            config={"configurable": {"thread_id": f"research_{state.task_id}"}}
+            config={
+                "configurable": {
+                    "thread_id": f"research_{state.task_id}",
+                }
+            },
+            context=ResearchContext()
         )
         
         # Check research results
         if research_result.get("errors"):
-            logger.error(f"Research phase failed: {research_result['errors']}")
+            logger.error(f"Research subgraph failed: {research_result['errors']}")
             return {
                 "research_status": TaskStatus.FAILED,
                 "errors": research_result["errors"]
             }
         
         if not research_result.get("final_report"):
-            logger.error("Research phase completed but no report generated")
+            logger.error("Research subgraph completed but no report generated")
             return {
                 "research_status": TaskStatus.FAILED,
                 "errors": ["Research completed but no report was generated"]
@@ -129,9 +142,9 @@ async def execute_research_phase(state: State, runtime: Runtime[Context]) -> Dic
         # Update progress
         progress.progress_percentage = 50.0
         progress.current_stage = "研究完成"
-        progress.detailed_status = "深度研究完成，开始播客生成阶段"
+        progress.detailed_status = "深度研究完成，准备开始播客生成阶段"
         
-        logger.info(f"Research phase completed for task {state.task_id}")
+        logger.info(f"Research subgraph completed for task {state.task_id}")
         
         return {
             "research_status": TaskStatus.COMPLETED,
@@ -142,17 +155,20 @@ async def execute_research_phase(state: State, runtime: Runtime[Context]) -> Dic
         }
         
     except Exception as e:
-        logger.error(f"Research phase failed: {e}")
+        logger.error(f"Research subgraph failed: {e}")
         return {
             "research_status": TaskStatus.FAILED,
-            "errors": [f"Research phase failed: {str(e)}"]
+            "errors": [f"Research subgraph failed: {str(e)}"]
         }
 
 
-async def execute_podcast_phase(state: State, runtime: Runtime[Context]) -> Dict[str, Any]:
-    """Execute the podcast generation phase using the podcast sub-graph."""
+async def execute_podcast_subgraph(state: State, runtime: Runtime[Context]) -> Dict[str, Any]:
+    """Execute the podcast generation subgraph and map its results."""
     try:
-        logger.info(f"Starting podcast phase for task {state.task_id}")
+        logger.info(f"Starting podcast subgraph for task {state.task_id}")
+        
+        if not state.research_report:
+            return {"errors": ["No research report available for podcast generation"]}
         
         # Update progress
         progress = GenerationProgress(
@@ -163,9 +179,9 @@ async def execute_podcast_phase(state: State, runtime: Runtime[Context]) -> Dict
             detailed_status="正在生成播客脚本和音频"
         )
         
-        # Import and call podcast sub-graph
-        from podcast.graph import graph as podcast_graph
+        # Import podcast state and context for proper input
         from podcast.state import InputState as PodcastInputState
+        from podcast.context import Context as PodcastContext
         
         # Prepare podcast input
         podcast_input = PodcastInputState(
@@ -173,15 +189,20 @@ async def execute_podcast_phase(state: State, runtime: Runtime[Context]) -> Dict
             messages=[HumanMessage(content=f"请基于研究报告生成播客内容")]
         )
         
-        # Execute podcast sub-graph
+        # Execute podcast subgraph with proper context
         podcast_result = await podcast_graph.ainvoke(
             podcast_input,
-            config={"configurable": {"thread_id": f"podcast_{state.task_id}"}}
+            config={
+                "configurable": {
+                    "thread_id": f"podcast_{state.task_id}"
+                }
+            },
+            context=PodcastContext()
         )
         
         # Check podcast results
         if podcast_result.get("errors"):
-            logger.error(f"Podcast phase failed: {podcast_result['errors']}")
+            logger.error(f"Podcast subgraph failed: {podcast_result['errors']}")
             return {
                 "podcast_status": TaskStatus.FAILED,
                 "errors": podcast_result["errors"]
@@ -189,10 +210,10 @@ async def execute_podcast_phase(state: State, runtime: Runtime[Context]) -> Dict
         
         # Update progress
         progress.progress_percentage = 90.0
-        progress.current_stage = "播客生成"
+        progress.current_stage = "播客生成完成"
         progress.detailed_status = "播客内容生成完成，正在整理输出"
         
-        logger.info(f"Podcast phase completed for task {state.task_id}")
+        logger.info(f"Podcast subgraph completed for task {state.task_id}")
         
         return {
             "podcast_status": TaskStatus.COMPLETED,
@@ -203,10 +224,10 @@ async def execute_podcast_phase(state: State, runtime: Runtime[Context]) -> Dict
         }
         
     except Exception as e:
-        logger.error(f"Podcast phase failed: {e}")
+        logger.error(f"Podcast subgraph failed: {e}")
         return {
             "podcast_status": TaskStatus.FAILED,
-            "errors": [f"Podcast phase failed: {str(e)}"]
+            "errors": [f"Podcast subgraph failed: {str(e)}"]
         }
 
 
@@ -264,7 +285,7 @@ async def finalize_results(state: State, runtime: Runtime[Context]) -> Dict[str,
         return {"errors": [f"Result finalization failed: {str(e)}"]}
 
 
-def should_continue_workflow(state: State) -> Literal["execute_research_phase", "execute_podcast_phase", "finalize_results", "__end__"]:
+def should_continue_workflow(state: State) -> Literal["execute_research_subgraph", "execute_podcast_subgraph", "finalize_results", "__end__"]:
     """Determine the next step in the podcast generation workflow."""
     
     # Check for errors
@@ -274,7 +295,7 @@ def should_continue_workflow(state: State) -> Literal["execute_research_phase", 
     
     # Check research phase
     if state.research_status == TaskStatus.PENDING or state.research_status == TaskStatus.IN_PROGRESS:
-        return "execute_research_phase"
+        return "execute_research_subgraph"
     
     if state.research_status == TaskStatus.FAILED:
         return "__end__"
@@ -282,7 +303,7 @@ def should_continue_workflow(state: State) -> Literal["execute_research_phase", 
     # Check podcast phase
     if (state.research_status == TaskStatus.COMPLETED and 
         (state.podcast_status == TaskStatus.PENDING or state.podcast_status == TaskStatus.IN_PROGRESS)):
-        return "execute_podcast_phase"
+        return "execute_podcast_subgraph"
     
     if state.podcast_status == TaskStatus.FAILED:
         return "__end__"
@@ -302,8 +323,8 @@ builder = StateGraph(State, input_schema=InputState, context_schema=Context)
 
 # Add nodes
 builder.add_node("initialize_task", initialize_task)
-builder.add_node("execute_research_phase", execute_research_phase)
-builder.add_node("execute_podcast_phase", execute_podcast_phase)
+builder.add_node("execute_research_subgraph", execute_research_subgraph)
+builder.add_node("execute_podcast_subgraph", execute_podcast_subgraph)
 builder.add_node("finalize_results", finalize_results)
 
 # Set entry point
@@ -316,12 +337,12 @@ builder.add_conditional_edges(
 )
 
 builder.add_conditional_edges(
-    "execute_research_phase",
+    "execute_research_subgraph",
     should_continue_workflow,
 )
 
 builder.add_conditional_edges(
-    "execute_podcast_phase",
+    "execute_podcast_subgraph",
     should_continue_workflow,
 )
 

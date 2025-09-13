@@ -30,9 +30,16 @@ class Context:
     )
 
     max_search_results: int = field(
-        default=10,
+        default=20,
         metadata={
             "description": "The maximum number of search results to return for each search query."
+        },
+    )
+    
+    output_base_dir: str = field(
+        default="./outputs",
+        metadata={
+            "description": "Base directory for saving all generated files."
         },
     )
 

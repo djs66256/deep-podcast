@@ -72,7 +72,27 @@ CHARACTER_DESIGN_PROMPT = """基于研究话题 "{topic}" 和内容特点，设�
    - 表达特点
    - 独特视角
 
-返回JSON格式的角色设定，不要包含```json。"""
+请严格按照以下JSON格式返回结果，不要包含任何其他文本：
+{{
+  "characters": [
+    {{
+      "name": "角色姓名",
+      "role": "主持人",
+      "personality": "性格特点描述",
+      "background": "背景介绍",
+      "expertise": ["专业领域1", "专业领域2"]
+    }},
+    {{
+      "name": "角色姓名",
+      "role": "嘉宾",
+      "personality": "性格特点描述",
+      "background": "背景介绍",
+      "expertise": ["专业领域1", "专业领域2"]
+    }}
+  ]
+}}
+
+注意：必须返回有效的JSON格式，确保角色设计符合话题特点和播客需求。"""
 
 SCRIPT_GENERATION_PROMPT = """基于以下信息，生成完整的播客对话脚本。
 
