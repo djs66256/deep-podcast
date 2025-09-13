@@ -6,7 +6,7 @@
 
 深度播客生成系统是一个基于 [LangGraph](https://github.com/langchain-ai/langgraph) 的多智能体系统，能够从用户提供的研究话题自动生成高质量的研究报告，并将其转化为生动有趣的播客音频内容。
 
-![系统架构图](./static/system_architecture.png)
+![系统架构图](./static/studio_ui.png)
 
 ## ✨ 系统特性
 
